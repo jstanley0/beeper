@@ -49,10 +49,10 @@ public:
 
   void silence() {
     for(int c = 0; c < 4; ++c)
-      set_attenuator(c, 31);
+      set_attenuator(c, 15);
   }
 
-  // ch 0..3, val 0 (loudest) .. 31 (silent)
+  // ch 0..3, val 0 (loudest) .. 15 (silent)
   void set_attenuator(int ch, int val) {
      int cmd = (val & 0xF);
      cmd |= ((ch & 0x3) << 5);
@@ -91,26 +91,31 @@ public:
     }
     set_bank_1(pi, set);
     clear_bank_1(pi, clear);
-    gpio_trigger(pi, STROBE, 10, 0);
+    gpio_trigger(pi, STROBE, 8, 0);
     gpio_write(pi, LED, 0);
   }
 
 };
 
-const int CHORD[] = {262, 311, 392};
+const int CHORD[] = {262, 333, 392};
 
 int main(int argc, char **argv)
 {
   Beeper beeper;
 
   for(int ch = 0; ch < 3; ++ch) {
-    beeper.set_attenuator(ch, 9 - ch);
+    beeper.set_attenuator(ch, 0);
     beeper.set_frequency(ch, CHORD[ch]);
-    usleep(700000);
+    usleep(750000);
   }
-  usleep(1400000);
+  for(int atten = 1; atten < 16; ++atten) {
+    beeper.set_attenuator(0, atten);
+    beeper.set_attenuator(1, atten);
+    beeper.set_attenuator(2, atten);
+    usleep(150000);
+    
+  }
   beeper.silence();
-
   usleep(500000);
 
   beeper.set_attenuator(3, 0);
