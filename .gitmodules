@@ -1,0 +1,3 @@
+[submodule "light-midi-parser"]
+	path = light-midi-parser
+	url = ./light-midi-parser
