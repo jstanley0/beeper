@@ -117,7 +117,7 @@ public:
   {
     for(int i = 0; i < POLYPHONY; ++i) {
       if (playing[i].decaying) {
-        if (++playing[i].atten >= 15) {
+        if (++playing[i].atten > 15) {
           playing[i].decaying = false;
         } else {
           beeper.set_attenuator(i, playing[i].atten);
