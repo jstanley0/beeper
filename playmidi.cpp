@@ -7,11 +7,13 @@ extern "C" {
 #include "beeper.h"
 
 struct Note {
-  int ch;
+  int ref;
   int val;
   int seq;
+  int atten;
+  bool decaying;
 
-  Note() : ch(0), val(0), seq(0) {}
+  Note() : ref(0), val(0), seq(0), atten(15), decaying(false) {}
 };
 
 const int POLYPHONY = 3;
@@ -43,9 +45,11 @@ public:
 
   void note_off(int ch, int note, int vel) {
     for(int i = 0; i < POLYPHONY; ++i) {
-      if (playing[i].val == note && playing[i].ch == ch) {
-        playing[i].val = 0;
-        beeper.set_attenuator(i, 15);
+      if (playing[i].val == note) {
+        if (--playing[i].ref == 0) {
+          playing[i].val = 0;
+          playing[i].decaying = true;
+        }
       }
     }
   }
@@ -67,14 +71,31 @@ public:
       return;
     }
 
-    // find an available output channel
+    // see if this note is already playing, and increment the ref count
     int i;
     for(i = 0; i < POLYPHONY; ++i) {
-      if (playing[i].val == 0)
+      if (playing[i].val == note) {
+        ++playing[i].ref;
+        return;
+      }
+    }
+
+    // find an available output channel
+    for(i = 0; i < POLYPHONY; ++i) {
+      if (playing[i].val == 0 && !playing[i].decaying)
         break;
     }
+
+    // if all channels are in use, pick one where a note is in decay
     if (i == POLYPHONY) {
-      // all our output channels are playing, so ... cut off the oldest one :(
+      for(i = 0; i < POLYPHONY; ++i) {
+        if (playing[i].val == 0)
+          break;
+      }
+    }
+
+    // all our output channels are actively playing, so ... preempt the oldest one :(
+    if (i == POLYPHONY) {
       i = 0;
       for(int j = 1; j < POLYPHONY; ++j) {
         if (playing[j].seq < playing[i].seq) {
@@ -82,12 +103,27 @@ public:
         }
       }
     }
+
     // play the note!
     playing[i].val = note;
-    playing[i].ch = ch;
+    playing[i].ref = 1;
     playing[i].seq = ++seq;
+    playing[i].atten = velocity_to_attenuator(vel);
     beeper.set_frequency(i, freq_table[note]);
-    beeper.set_attenuator(i, velocity_to_attenuator(vel));
+    beeper.set_attenuator(i, playing[i].atten);
+  }
+
+  void decay()
+  {
+    for(int i = 0; i < POLYPHONY; ++i) {
+      if (playing[i].decaying) {
+        if (++playing[i].atten >= 15) {
+          playing[i].decaying = false;
+        } else {
+          beeper.set_attenuator(i, playing[i].atten);
+        }
+      }
+    }
   }
 };
 
@@ -112,9 +148,17 @@ int main(int argc, char* argv[]) {
   midi_combine_tracks(trks);
   midi_convert_deltatime(trks);
 
+  midi_hdr hdr;
+  midi_get_header(midi, &hdr);
+
+  int tempo = 500000;
+
   Player player;
   for(midi_evt_node *node = trks->trk[0]; node != NULL; node = node->next) {
     switch(node->evt) {
+    case midi_meta_evt:
+      if (node->meta == midi_set_tempo)
+        tempo = node->param1;
     case midi_noteoff:
       player.note_off(node->chan, node->param1, node->param2);
       break;
@@ -123,7 +167,13 @@ int main(int argc, char* argv[]) {
       break;
     }
     if (node->time > 0) {
-      usleep(node->time * 1000);
+      int us = (node->time * tempo) / hdr.division;
+      while(us > 50000) {
+        usleep(45000);  // HAX. compensate for some overhead :P
+        us -= 50000;
+        player.decay();
+      }
+      usleep(us);
     }
   }
 
