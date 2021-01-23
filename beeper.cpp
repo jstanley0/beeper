@@ -19,7 +19,11 @@ pin mapping (RPI GPIO => SN76489)
 #include "beeper.h"
 
 const int CLOCK = 4;
-const int FREQ = 3579545;
+// 3.57MHz is the frequency used by the TI; however, we're better off using
+// a lower frequency to allow a lower playable pitch. Note this does require
+// a longer latch time
+const int FREQ = 3579545  / 2;
+const int LATCH_US = 8    * 2;
 const int READY = 24;
 const int STROBE = 25;
 const int LED = 23;
@@ -86,6 +90,6 @@ void Beeper::send_byte(int ch) {
   }
   set_bank_1(pi, set);
   clear_bank_1(pi, clear);
-  gpio_trigger(pi, STROBE, 8, 0);
+  gpio_trigger(pi, STROBE, LATCH_US, 0);
   gpio_write(pi, LED, 0);
 }
