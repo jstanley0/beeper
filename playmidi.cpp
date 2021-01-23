@@ -3,6 +3,7 @@
 #include <math.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 extern "C" {
 #include "midi.h"
 }
@@ -11,12 +12,13 @@ extern "C" {
 struct Note {
   int val;
   int atten;
-  bool decaying;
 
-  Note() : val(0), atten(15), decaying(false) {}
+  Note() : val(0), atten(15) {}
 };
 
 const int POLYPHONY = 3;
+
+bool do_decay = true;
 
 class Player {
   Beeper beeper;
@@ -45,7 +47,8 @@ public:
     for(int i = 0; i < POLYPHONY; ++i) {
       if (playing[i].val == note) {
         playing[i].val = 0;
-        playing[i].decaying = true;
+        if (!do_decay)
+          beeper.set_attenuator(i, 15);
         std::cerr << "voice:" << i;
       }
     }
@@ -83,9 +86,9 @@ public:
     }
 
     // find an available output channel
-    if (i == POLYPHONY) {
+    if (i == POLYPHONY && do_decay) {
       for(i = 0; i < POLYPHONY; ++i) {
-        if (playing[i].val == 0 && !playing[i].decaying)
+        if (playing[i].val == 0 && playing[i].atten == 15)
           break;
       }
     }
@@ -138,12 +141,8 @@ public:
   void decay()
   {
     for(int i = 0; i < POLYPHONY; ++i) {
-      if (playing[i].decaying) {
-        if (++playing[i].atten > 15) {
-          playing[i].decaying = false;
-        } else {
-          beeper.set_attenuator(i, playing[i].atten);
-        }
+      if (playing[i].atten < (playing[i].val ? 10 : 15)) {
+        beeper.set_attenuator(i, ++playing[i].atten);
       }
     }
   }
@@ -157,8 +156,14 @@ void silence(int) {
 int main(int argc, char* argv[]) {
   signal(SIGINT, silence);
 
+  if (argc == 3 && 0 == strcmp(argv[1], "--no-decay")) {
+    do_decay = false;
+    --argc;
+    ++argv;
+  }
+
   if (argc != 2) {
-    std::cerr << "Usage: playmidi file.mid" << std::endl;
+    std::cerr << "Usage: playmidi [--no-decay] file.mid" << std::endl;
     return 1;
   }
 
@@ -186,10 +191,12 @@ int main(int argc, char* argv[]) {
   for(midi_evt_node *node = trks->trk[0]; node != NULL; node = node->next) {
     if (node->time > 0) {
       int us = (node->time * tempo) / hdr.division;
-      while(us > 50000) {
-        usleep(45000);  // HAX. compensate for some overhead :P
-        us -= 50000;
-        player.decay();
+      if (do_decay) {
+        while(us > 50000) {
+          usleep(45000);  // HAX. compensate for some overhead :P
+          us -= 50000;
+          player.decay();
+        }
       }
       usleep(us);
     }
