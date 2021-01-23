@@ -17,6 +17,7 @@ struct Note {
 };
 
 const int POLYPHONY = 3;
+const int SUSTAIN_LEVEL = 10;
 
 bool do_decay = true, do_drop = true;
 
@@ -143,7 +144,7 @@ public:
   void decay()
   {
     for(int i = 0; i < POLYPHONY; ++i) {
-      if (playing[i].atten < (playing[i].val ? 10 : 15)) {
+      if (playing[i].atten < (playing[i].val ? SUSTAIN_LEVEL : 15)) {
         beeper.set_attenuator(i, ++playing[i].atten);
       }
     }
