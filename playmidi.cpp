@@ -18,7 +18,7 @@ struct Note {
 
 const int POLYPHONY = 3;
 
-bool do_decay = true;
+bool do_decay = true, do_drop = true;
 
 class Player {
   Beeper beeper;
@@ -111,10 +111,12 @@ public:
         if (playing[i].val > playing[hi_ix].val)
           hi_ix = i;
       }
-      // if the new note isn't lowest or highest, drop it
-      if (note > playing[lo_ix].val && note < playing[hi_ix].val) {
-        std::cerr << " DROPPED" << std::endl;
-        return;
+      if (do_drop) {
+        // if the new note isn't lowest or highest, drop it
+        if (note > playing[lo_ix].val && note < playing[hi_ix].val) {
+          std::cerr << " DROPPED" << std::endl;
+          return;
+        }
       }
       // otherwise preempt the middle note
       for(i = 0; i < POLYPHONY; ++i) {
@@ -156,14 +158,18 @@ void silence(int) {
 int main(int argc, char* argv[]) {
   signal(SIGINT, silence);
 
-  if (argc == 3 && 0 == strcmp(argv[1], "--no-decay")) {
-    do_decay = false;
-    --argc;
-    ++argv;
+  while (argc > 2) {
+    if (0 == strcmp(argv[1], "--no-decay"))
+      do_decay = false;
+    else if (0 == strcmp(argv[1], "--no-drop"))
+      do_drop = false;
+
+      --argc;
+      ++argv;
   }
 
   if (argc != 2) {
-    std::cerr << "Usage: playmidi [--no-decay] file.mid" << std::endl;
+    std::cerr << "Usage: playmidi [--no-drop|--no-decay] file.mid" << std::endl;
     return 1;
   }
 
